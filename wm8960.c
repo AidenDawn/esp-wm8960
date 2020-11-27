@@ -90,7 +90,7 @@ static const struct reg_default wm8960_reg_defaults[] = {
 	{ 0x37, 0x00e9 },
 };
 
-static struct register_map wm8960_reg_states = wm8960_reg_defaults;
+// static struct register_map wm8960_reg_states = wm8960_reg_defaults;
 
 /* Forward Declarations for static functions */
 static esp_err_t wm8960_write_register(i2c_dev_t *dev, uint8_t reg_addr, uint32_t reg_val);
@@ -136,6 +136,6 @@ static esp_err_t wm8960_write_register(i2c_dev_t *dev, uint8_t reg_addr, uint32_
     uint8_t buff[3];
     buff[0] = (reg_addr << 1) | ((reg_val >> 8) & 0x0f);
     buff[1] = reg_val & 0xff;
-    ret = i2c_bus_write_data((dev->port, dev->addr, buff, 2);
+    ret = i2c_bus_write_data(dev->port, dev->addr, buff, 2);
     return ret;
 }
