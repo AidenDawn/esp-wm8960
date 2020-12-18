@@ -102,8 +102,10 @@
 #define WM8960_OPCLK_DIV_6		(5 << 0)
 
 esp_err_t wm8960_init(i2c_dev_t *dev);
-esp_err_t wm8960_set_vol(i2c_dev_t *dev, uint8_t vol);
+
+esp_err_t wm8960_enable_soft_mute(i2c_dev_t *dev, bool enable);
 esp_err_t wm8960_set_mute(i2c_dev_t *dev, bool mute);
+esp_err_t wm8960_set_volume(i2c_dev_t *dev, uint8_t vol, bool init);
 esp_err_t wm8960_get_volume(uint8_t* vol);
 
 #endif /* _WM8960_H */

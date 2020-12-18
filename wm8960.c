@@ -4,6 +4,9 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
+#include "nvs.h"
+#include "nvs_flash.h"
+
 #include "esp_log.h"
 #include "driver/i2c.h"
 
@@ -33,8 +36,8 @@
 
 static const char *TAG = "WM8960";
 
-static uint8_t volume;
-
+const char* audio_nvs_nm = "audio";
+const char* vol_nvs_key = "volume";
 
 /* Forward Declarations for static functions */
 /**
@@ -118,39 +121,71 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
 
     // More init required
 
+    wm8960_set_vol(dev, 0, true); //Init volume with value pre-shutdown
+
     if (ret == ESP_OK)
         ESP_LOGI(TAG, "init complete");
-    return ret;
-}
-
-esp_err_t wm8960_set_vol(i2c_dev_t *dev, uint8_t vol){
-    esp_err_t ret = 0;
-    int vol_to_set = 0;
-    if (vol == 0) {
-        vol_to_set = 0;
-    } else {
-        volume = vol;
-        vol_to_set = (vol / 10) * 5 + 200;
-    }
-    ret |= wm8960_write_register(dev, 0xb, 0x100 | vol_to_set);
-    ret |= wm8960_write_register(dev, 0xc, 0x100 | vol_to_set);
-
     return ret;
 }
 
 esp_err_t wm8960_set_mute(i2c_dev_t *dev, bool mute){
     esp_err_t ret = 0;
     if (mute) {
-        ret |= wm8960_set_vol(dev, 0);
+        ret |= wm8960_write_register(dev, 0x05, 1<<3);
     } else {
-        ret |= wm8960_set_vol(dev, volume);
+        ret |= wm8960_write_register(dev, 0x05, 0<<3);
     }
     return ret;
 }
 
+esp_err_t wm8960_enable_soft_mute(i2c_dev_t *dev, bool enable){
+    esp_err_t ret = 0;
+    if (enable) {
+        ret |= wm8960_write_register(dev, 0x06, 1<<3);
+    } else {
+        ret |= wm8960_write_register(dev, 0x06, 0<<3);
+    }
+    return ret;
+}
+
+esp_err_t wm8960_set_volume(i2c_dev_t *dev, uint8_t vol, bool init){
+    esp_err_t ret = 0;
+    uint8_t vol_to_set = 0;
+    nvs_handle_t audioStore;
+
+    ret = nvs_open(audio_nvs_nm, NVS_READWRITE, &audioStore);
+
+    if(init){
+        ret |= nvs_get_u8(audioStore, vol_nvs_key, &vol_to_set);
+    } else {
+        if (vol == 0) {
+            vol_to_set = 0;
+        } else {
+            ret |= nvs_set_u8(audioStore, vol_nvs_key, vol);
+            vol_to_set = (vol/255) * 100;    //(vol / 10) * 5 + 200;
+        }
+    }
+    
+    ret |= wm8960_write_register(dev, 0x0A, vol_to_set);
+    ret |= wm8960_write_register(dev, 0x0B, 0x100 | vol_to_set);
+
+    ret |= nvs_commit(audioStore);
+    nvs_close(audioStore);
+
+    return ret;
+}
+
 esp_err_t wm8960_get_volume(uint8_t* vol){
+    esp_err_t ret;
+    nvs_handle_t audioStore;
+    uint8_t volume = 0;
+
+    ret = nvs_open(audio_nvs_nm, NVS_READONLY, &audioStore);
+    ret |= nvs_get_u8(audioStore, vol_nvs_key, &volume);
+    nvs_close(audioStore);
+
     *vol = volume;
-    return ESP_OK;
+    return ret;
 }
 
 static esp_err_t wm8960_write_register(i2c_dev_t *dev, uint8_t reg_addr, uint16_t reg_val){
