@@ -101,11 +101,43 @@
 #define WM8960_OPCLK_DIV_5_5	(4 << 0)
 #define WM8960_OPCLK_DIV_6		(5 << 0)
 
+/**
+  * @brief  Initialise WM8960.
+  * @param  dev: The i2c device corresponding to wm8960 units
+  * @retval ESP_OK: success.
+  */
 esp_err_t wm8960_init(i2c_dev_t *dev);
 
+/**
+  * @brief  Enable WM8960 soft mute mode.
+  * @param  dev: The i2c device corresponding to wm8960 units
+  * @param  enable: set true to enable soft mute, set false to disable
+  * @retval ESP_OK: success.
+  */
 esp_err_t wm8960_enable_soft_mute(i2c_dev_t *dev, bool enable);
+
+/**
+  * @brief  Enable WM8960 mute.
+  * @param  dev: The i2c device corresponding to wm8960 units
+  * @param  enable: set true to enable mute, set false to disable
+  * @retval ESP_OK: success.
+  */
 esp_err_t wm8960_set_mute(i2c_dev_t *dev, bool mute);
+
+/**
+  * @brief  Set WM8960 DAC volume.
+  * @param  dev: The i2c device corresponding to wm8960 units
+  * @param  vol: value of DAC volume (0-100)
+  * @param  init: set true if in startup mode (reads volume from nvs)
+  * @retval ESP_OK: success.
+  */
 esp_err_t wm8960_set_volume(i2c_dev_t *dev, uint8_t vol, bool init);
+
+/**
+  * @brief  Get WM8960 DAC volume.
+  * @param  vol: Read volume from nvs
+  * @retval ESP_OK: success.
+  */
 esp_err_t wm8960_get_volume(uint8_t* vol);
 
 #endif /* _WM8960_H */

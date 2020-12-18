@@ -112,16 +112,33 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
         return ret;
     }
 
-    //configure audio interface
+    //Configure audio interface
     ret = wm8960_write_register(dev, 0x07, 0<<3 | 0<<2 | 1<<1 | 0<<0);   //I2S 16-bit Slave mode
     if(ret != ESP_OK)  {
         ESP_LOGI(TAG, "I2S config failed");
         return ret;
     }
 
-    // More init required
+    //Configure output routing
+    ret = wm8960_write_register(dev, 0x17, 1<<1 | 1<<0);        //Enable Slowclock for volume update zero-cross detect
+    ret |= wm8960_write_register(dev, 0x30, 1<<3 | 0<<2);       //Configure HP Switch
+    ret |= wm8960_write_register(dev, 0x18, 1<<6 | 0<<5);       //Enable HP switch
+    ret |= wm8960_write_register(dev, 0x22, 1<<8);              //LDAC -> Output Mixer
+    ret |= wm8960_write_register(dev, 0x25, 1<<8);              //RDAC -> Output Mixer
+    ret |= wm8960_write_register(dev, 0x02, 0x006F | 1<<8);     //LOUT1 (HP) Volume Set: -15dB
+    ret |= wm8960_write_register(dev, 0x03, 0x006F | 1<<8);     //ROUT1 (HP) Volume Set: -15dB
+    if(ret != ESP_OK)  {
+        ESP_LOGI(TAG, "output routing failed");
+        return ret;
+    }
 
-    wm8960_set_vol(dev, 0, true); //Init volume with value pre-shutdown
+    //Configure output volume
+    ret = wm8960_set_vol(dev, 0, true); //Init volume with value pre-shutdown
+    ret |= wm8960_set_mute(dev, false); //Unmute DAC
+    if(ret != ESP_OK)  {
+        ESP_LOGI(TAG, "volume restoration failed");
+        return ret;
+    }
 
     if (ret == ESP_OK)
         ESP_LOGI(TAG, "init complete");
