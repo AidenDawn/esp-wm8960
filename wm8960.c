@@ -79,43 +79,32 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
     else
         ESP_LOGI(TAG, "reset completed");
 
-    ret =  wm8960_write_register(dev, 0x19, 1<<8 | 1<<7 | 1<<6);                //Enable main volTAGe references
+    ret =  wm8960_write_register(dev, 0x19, 1<<8 | 1<<7 | 1<<6 | 1<<4 | 1<<2);  //Enable main voltage references & AINR & ADCR
     ret |= wm8960_write_register(dev, 0x1A, 1<<8 | 1<<7 | 1<<6 | 1<<5 | 1<<0);  //Enable DAC & output peripherals + PLL
-    ret |= wm8960_write_register(dev, 0x2F, 1<<3 | 1<<2);                       //Enable mixer outputs
+    ret |= wm8960_write_register(dev, 0x2F, 1<<4 | 1<<3 | 1<<2);                //Enable mixer outputs & RMIC
     if(ret != ESP_OK)  {
         ESP_LOGI(TAG, "power mngr. config failed");
         return ret;
     }
     
-    //Configure SYSCLK
-    /* SYSCLK = 12.288MHz
-     * PLLin = 25/2
-     * R = (4 x 2 x 12.288)/12.5MHz = 7.86432
-     * PLLN = int(R) = 7
-     * PLLK = 2^24 * (R - int(R)) = 2^24 * 0.86432 = 0xDD4413h
-     */ 
-    ret =  wm8960_write_register(dev, 0x34, 1<<5 | 1<<4 | 0x07); //PLL Fractional Mode, Prescale & PLLN=7
-    uint32_t PLLK = 0xDD4413;
-    ret |= wm8960_write_register(dev, 0x35, (PLLK >> 16) & 0xFF);
-    ret |= wm8960_write_register(dev, 0x36, (PLLK >> 8) & 0xFF);
-    ret |= wm8960_write_register(dev, 0x37, (PLLK) & 0xFF);
-    if(ret != ESP_OK)  {
-        ESP_LOGI(TAG, "SYSCLK config failed");
-        return ret;
-    }
-
-    //Configure peripheral clocking
-    ret = wm8960_write_register(dev, 0x04, 1<<2 | 1<<0);    //Set SYSCLKDIV to 2 & select PLL 
-    ret |= wm8960_write_register(dev, 0x08, 1<<2);          //Set BCLKDIV to /4
-    if(ret != ESP_OK)  {
-        ESP_LOGI(TAG, "clocking config failed");
-        return ret;
-    }
+    //Configure SYSCLK & peripheral clocks
+    wm8960_set_sample_rate(dev, 48000);
 
     //Configure audio interface
-    ret = wm8960_write_register(dev, 0x07, 0<<3 | 0<<2 | 1<<1 | 0<<0);   //I2S 16-bit Slave mode
+    ret = wm8960_write_register(dev, 0x07, 0<<3 | 0<<2 | 1<<1 | 0<<0);  //I2S 16-bit Slave mode
+    ret |= wm8960_write_register(dev, 0x17, 1<<3 | 0<<2);               //Send ADCR down left and right digital channels
     if(ret != ESP_OK)  {
         ESP_LOGI(TAG, "I2S config failed");
+        return ret;
+    }
+
+    //Configure input routing
+    //ret = wm8960_write_register(dev, 0x21, 1<<8 | 1<<3);      //Dont Configure LEFT
+    ret = wm8960_write_register(dev, 0x21, 1<<8 | 1<<3);        //Connect RPGA to Boostmixer and MIC in single-ended mode
+    ret |= wm8960_write_register(dev, 0x11, 1<<7);              //Enable Automatic Level Control
+    ret |= wm8960_write_register(dev, 0x14, 1<<0);              //Enable Noise Gate
+    if(ret != ESP_OK)  {
+        ESP_LOGI(TAG, "input routing failed");
         return ret;
     }
 
@@ -133,7 +122,7 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
     }
 
     //Configure output volume
-    ret = wm8960_set_vol(dev, 0, true); //Init volume with value pre-shutdown
+    ret = wm8960_set_volume(dev, 0, true); //Init volume with value pre-shutdown
     ret |= wm8960_set_mute(dev, false); //Unmute DAC
     if(ret != ESP_OK)  {
         ESP_LOGI(TAG, "volume restoration failed");
@@ -142,6 +131,71 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
 
     if (ret == ESP_OK)
         ESP_LOGI(TAG, "init complete");
+    return ret;
+}
+
+esp_err_t wm8960_set_sample_rate(i2c_dev_t *dev, int rate){
+    esp_err_t ret;
+
+    //Configure SYSCLK from MCLK
+    if(rate % 8000 == 0){
+        /* SYSCLK = 12.288MHz
+         * PLLin = 25/2
+         * R = (4 x 2 x 12.288)/12.5MHz = 7.86432
+         * PLLN = int(R) = 7
+         * PLLK = 2^24 * (R - int(R)) = 2^24 * 0.86432 = 0xDD4413h
+         */ 
+        ret =  wm8960_write_register(dev, 0x34, 1<<5 | 1<<4 | 0x07); //PLL Fractional Mode, Prescale & PLLN=7
+        uint32_t PLLK = 0xDD4413;
+        ret |= wm8960_write_register(dev, 0x35, (PLLK >> 16) & 0xFF);
+        ret |= wm8960_write_register(dev, 0x36, (PLLK >> 8) & 0xFF);
+        ret |= wm8960_write_register(dev, 0x37, (PLLK) & 0xFF);
+        if(ret != ESP_OK)  {
+            ESP_LOGI(TAG, "SYSCLK config failed");
+            return ret;
+        }
+    } else {
+        /* SYSCLK = 11.2896MHz
+         * PLLin = 25/2
+         * R = (4 x 2 x 11.2896)/12.5MHz = 7.225344
+         * PLLN = int(R) = 7
+         * PLLK = 2^24 * (R - int(R)) = 2^24 * 0.225344 = 0x39B025h
+         */ 
+        ret =  wm8960_write_register(dev, 0x34, 1<<5 | 1<<4 | 0x07); //PLL Fractional Mode, Prescale & PLLN=7
+        uint32_t PLLK = 0x39B025;
+        ret |= wm8960_write_register(dev, 0x35, (PLLK >> 16) & 0xFF);
+        ret |= wm8960_write_register(dev, 0x36, (PLLK >> 8) & 0xFF);
+        ret |= wm8960_write_register(dev, 0x37, (PLLK) & 0xFF);
+        if(ret != ESP_OK)  {
+            ESP_LOGI(TAG, "SYSCLK config failed");
+            return ret;
+        }
+    }
+
+    //Configure peripheral clocking
+    switch(rate){
+        case 32000: {
+            ret = wm8960_write_register(dev, 0x04, 0x1<<6 | 0x1<<3 | 1<<2 | 1<<0);  //Set SYSCLKDIV to 2 & select PLL (ADCDIV = 001)
+            break;
+        }
+        case 44100: {
+            ret = wm8960_write_register(dev, 0x04, 1<<2 | 1<<0);    //Set SYSCLKDIV to 2 & select PLL (ADCDIV = 000)
+            break;
+        }
+        case 48000: {
+            ret = wm8960_write_register(dev, 0x04, 1<<2 | 1<<0);    //Set SYSCLKDIV to 2 & select PLL (ADCDIV = 000)
+            break;
+        }
+        default: {
+            ret = wm8960_write_register(dev, 0x04, 0x3<<6 | 0x3<<3 | 1<<2 | 1<<0);    //Set SYSCLKDIV to 2 & select PLL (ADCDIV = 011)
+            break;
+        }
+    }
+    if(ret != ESP_OK)  {
+        ESP_LOGI(TAG, "clocking config failed");
+        return ret;
+    }
+    ESP_LOGI(TAG, "sample rate set to %dkHz", rate);
     return ret;
 }
 
@@ -161,6 +215,18 @@ esp_err_t wm8960_enable_soft_mute(i2c_dev_t *dev, bool enable){
         ret |= wm8960_write_register(dev, 0x06, 1<<3);
     } else {
         ret |= wm8960_write_register(dev, 0x06, 0<<3);
+    }
+    return ret;
+}
+
+esp_err_t wm8960_set_input_mute(i2c_dev_t *dev, bool mute){
+    esp_err_t ret = 0;
+    if (mute) {
+        ret |= wm8960_write_register(dev, 0x00, 1<<8 | 1<<7 | 1<<6);
+        ret |= wm8960_write_register(dev, 0x01, 1<<8 | 1<<7 | 1<<6);
+    } else {
+        ret |= wm8960_write_register(dev, 0x00, 1<<8 | 0<<7 | 1<<6);
+        ret |= wm8960_write_register(dev, 0x01, 1<<8 | 0<<7 | 1<<6);
     }
     return ret;
 }

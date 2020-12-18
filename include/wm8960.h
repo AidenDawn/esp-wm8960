@@ -1,6 +1,8 @@
 #ifndef _WM8960_H
 #define _WM8960_H
 
+#include "i2c_bus.h"
+
 /* WM8960 register space */
 #define WM8960_CACHEREGNUM 	56
 
@@ -101,12 +103,22 @@
 #define WM8960_OPCLK_DIV_5_5	(4 << 0)
 #define WM8960_OPCLK_DIV_6		(5 << 0)
 
+i2c_dev_t wm8960;
+
 /**
   * @brief  Initialise WM8960.
   * @param  dev: The i2c device corresponding to wm8960 units
   * @retval ESP_OK: success.
   */
 esp_err_t wm8960_init(i2c_dev_t *dev);
+
+/**
+  * @brief  Set WM8960 sample_rate.
+  * @param  dev: The i2c device corresponding to wm8960 units
+  * @param  rate: audio sample rate
+  * @retval ESP_OK: success.
+  */
+esp_err_t wm8960_set_sample_rate(i2c_dev_t *dev, int rate);
 
 /**
   * @brief  Enable WM8960 soft mute mode.
