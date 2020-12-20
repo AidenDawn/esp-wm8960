@@ -36,8 +36,8 @@
 
 static const char *TAG = "WM8960";
 
-const char* audio_nvs_nm = "audio";
-const char* vol_nvs_key = "volume";
+static const char *audio_nvs_nm = "audio";
+static const char *vol_nvs_key = "dac_volume";
 
 /* Forward Declarations for static functions */
 /**
@@ -122,7 +122,7 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
     }
 
     //Configure output volume
-    ret = wm8960_set_volume(dev, 0, true); //Init volume with value pre-shutdown
+    //ret = wm8960_set_volume(dev, 0, true); //Init volume with value pre-shutdown
     ret |= wm8960_set_mute(dev, false); //Unmute DAC
     if(ret != ESP_OK)  {
         ESP_LOGI(TAG, "volume restoration failed");
