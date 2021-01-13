@@ -108,6 +108,7 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
     wm8960_set_clk(dev, 44100, 16);
 
     if(wm8960_set_power(dev) != 0)  {
+        ESP_LOGI(TAG, "power mngr. config failed");
         printf("Source set fail !!\r\n");
         printf("Error code: %d\r\n",ret);
         return ret;
@@ -116,25 +117,6 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
     wm8960_dac_config(dev);
 
 /*
-    ret =  wm8960_write_register(dev, 0x19, 1<<8 | 1<<7 | 1<<6 | 1<<4 | 1<<2);  //Enable main voltage references & AINR & ADCR
-    ret |= wm8960_write_register(dev, 0x1A, 1<<8 | 1<<7 | 1<<6 | 1<<5 | 1<<0);  //Enable DAC & output peripherals + PLL
-    ret |= wm8960_write_register(dev, 0x2F, 1<<4 | 1<<3 | 1<<2);                //Enable mixer outputs & RMIC
-    if(ret != ESP_OK)  {
-        ESP_LOGI(TAG, "power mngr. config failed");
-        return ret;
-    }
-    
-    //Configure SYSCLK & peripheral clocks
-    wm8960_set_clk(dev, 44100, 16);
-
-    //Configure audio interface
-    ret = wm8960_write_register(dev, 0x07, 0<<3 | 0<<2 | 1<<1 | 0<<0);  //I2S 16-bit Slave mode
-    ret |= wm8960_write_register(dev, 0x17, 1<<3 | 0<<2);               //Send ADCR down left and right digital channels
-    if(ret != ESP_OK)  {
-        ESP_LOGI(TAG, "I2S config failed");
-        return ret;
-    }
-
     //Configure input routing
     //ret = wm8960_write_register(dev, 0x21, 1<<8 | 1<<3);      //Dont Configure LEFT
     ret = wm8960_write_register(dev, 0x21, 1<<8 | 1<<3);        //Connect RPGA to Boostmixer and MIC in single-ended mode
@@ -142,25 +124,6 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
     ret |= wm8960_write_register(dev, 0x14, 1<<0);              //Enable Noise Gate
     if(ret != ESP_OK)  {
         ESP_LOGI(TAG, "input routing failed");
-        return ret;
-    }
-
-    //Configure output routing
-    ret = wm8960_write_register(dev, 0x22, 1<<8 | 1<<7);        //LDAC -> Output Mixer
-    ret |= wm8960_write_register(dev, 0x25, 1<<8 | 1<<7);       //RDAC -> Output Mixer
-    ret |= wm8960_write_register(dev, 0x0A, 0x00FF);            //LDAC Volume
-    ret |= wm8960_write_register(dev, 0x0B, 0x00FF | 1<<8);     //RDAC Volume
-    if(ret != ESP_OK)  {
-        ESP_LOGI(TAG, "output routing failed");
-        return ret;
-    }
-
-    //Configure output volume
-    ret = wm8960_write_register(dev, 0x02, 0x006F);             //LOUT1 (HP) Volume Set: -15dB
-    ret |= wm8960_write_register(dev, 0x03, 0x006F | 1<<8);     //ROUT1 (HP) Volume Set: -15dB
-    ret |= wm8960_set_mute(dev, false);                         //Unmute DAC
-    if(ret != ESP_OK)  {
-        ESP_LOGI(TAG, "volume config failed");
         return ret;
     }
 
@@ -295,13 +258,24 @@ static esp_err_t wm8960_set_power(i2c_dev_t *dev){
 static esp_err_t wm8960_dac_config(i2c_dev_t *dev){
     esp_err_t ret;
 
-    ret = wm8960_set_mute(dev, false);
+    wm8960_reg_val[WM8960_LOUT1] |=  0x79;
+    wm8960_reg_val[WM8960_ROUT1] |= (1<<8) | 0x79;
+    ret = wm8960_write_register(dev, WM8960_LOUT1, wm8960_reg_val[WM8960_LOUT1]);
+    ret |= wm8960_write_register(dev, WM8960_ROUT1, wm8960_reg_val[WM8960_ROUT1]);
+
+    wm8960_reg_val[WM8960_LDACVOL] |=  0xD7;
+    wm8960_reg_val[WM8960_RDACVOL] |=  (1<<8) | 0xD7;
+    ret |= wm8960_write_register(dev, WM8960_LDACVOL, wm8960_reg_val[WM8960_LDACVOL]); //LDAC Volume
+    ret |= wm8960_write_register(dev, WM8960_RDACVOL, wm8960_reg_val[WM8960_RDACVOL]); //RDAC Volume
+
     wm8960_reg_val[WM8960_LOUTMIX] |= (1<<8); //DAC -> LOUT2
     wm8960_reg_val[WM8960_ROUTMIX] |= (1<<8); //DAC -> ROUT2
     ret |= wm8960_write_register(dev, WM8960_LOUTMIX, wm8960_reg_val[WM8960_LOUTMIX]);
     ret |= wm8960_write_register(dev, WM8960_ROUTMIX, wm8960_reg_val[WM8960_ROUTMIX]);
 
-    ret|= wm8960_set_volume(dev, 90);
+    if(ret == ESP_OK){
+        ret = wm8960_set_mute(dev, false);
+    }
 
     return ret;
 }
@@ -322,11 +296,30 @@ esp_err_t wm8960_set_mute(i2c_dev_t *dev, bool mute){
 
 esp_err_t wm8960_enable_soft_mute(i2c_dev_t *dev, bool enable){
     esp_err_t ret = 0;
-    if (enable) {
-        ret |= wm8960_write_register(dev, 0x06, 1<<3);
+    
+    wm8960_reg_val[WM8960_DACCTL2] |= 1<<2; //Slow mute ramp rate
+    if(!enable){
+        wm8960_reg_val[WM8960_DACCTL2] &= ~(1<<3); //Disable
+        ret = wm8960_write_register(dev, WM8960_DACCTL2, wm8960_reg_val[WM8960_DACCTL2]);
     } else {
-        ret |= wm8960_write_register(dev, 0x06, 0<<3);
+        wm8960_reg_val[WM8960_DACCTL2] |= 1<<3; //Enable
+        ret = wm8960_write_register(dev, WM8960_DACCTL2, wm8960_reg_val[WM8960_DACCTL2]);
     }
+
+    return ret;
+}
+
+esp_err_t wm8960_set_3D(i2c_dev_t *dev, bool enable, uint8_t depth){
+    esp_err_t ret;
+
+    if(enable){
+        wm8960_reg_val[WM8960_3D] |= (1<<0); //Enable 3D Mode
+    } else {
+        wm8960_reg_val[WM8960_3D] &= ~(1<<0); //Disable 3D Mode
+    }
+    wm8960_reg_val[WM8960_3D] |= depth<<1; //Set Percentage
+    ret = wm8960_write_register(dev, WM8960_3D, wm8960_reg_val[WM8960_3D]);
+
     return ret;
 }
 
@@ -342,22 +335,23 @@ esp_err_t wm8960_set_input_mute(i2c_dev_t *dev, bool mute){
     return ret;
 }
 
-esp_err_t wm8960_set_volume(i2c_dev_t *dev, uint8_t vol){
+/*esp_err_t wm8960_set_volume(i2c_dev_t *dev, uint8_t vol){
     esp_err_t ret = 0;
 
-    /*
-     * vol/100 * 80 = 90 steps from -74dB to +6dB
-     * -74dB = MUTE = 0
-     */
-    uint8_t vol_to_set = 0x4A; //80*(vol/100) + 47;
+    uint8_t vol_to_set = 0x79; //80*(vol/100) + 47;
 
-    wm8960_reg_val[WM8960_LOUT1] |=  vol_to_set;
-    wm8960_reg_val[WM8960_ROUT1] |= (1<<8) | vol_to_set;
+    wm8960_reg_val[WM8960_LOUT1] |=  0x79;
+    wm8960_reg_val[WM8960_ROUT1] |= (1<<8) | 0x79;
     ret = wm8960_write_register(dev, WM8960_LOUT1, wm8960_reg_val[WM8960_LOUT1]);
     ret |= wm8960_write_register(dev, WM8960_ROUT1, wm8960_reg_val[WM8960_ROUT1]);
 
+    wm8960_reg_val[WM8960_LDACVOL] |=  0xD7;
+    wm8960_reg_val[WM8960_RDACVOL] |=  (1<<8) | 0xD7;
+    ret |= wm8960_write_register(dev, WM8960_LDACVOL, wm8960_reg_val[WM8960_LDACVOL]); //LDAC Volume
+    ret |= wm8960_write_register(dev, WM8960_RDACVOL, wm8960_reg_val[WM8960_RDACVOL]); //RDAC Volume
+
     return ret;
-}
+}*/
 
 /*esp_err_t wm8960_set_volume(i2c_dev_t *dev, uint8_t vol, bool init){
     esp_err_t ret = 0;
