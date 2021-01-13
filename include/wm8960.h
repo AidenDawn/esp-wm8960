@@ -44,20 +44,20 @@
 #define WM8960_MONOMIX2		0x27
 #define WM8960_LOUT2VOL		0x28
 #define WM8960_ROUT2VOL		0x29
-#define WM8960_MONOVOL	    0x2a
+#define WM8960_MONOVOL	  0x2a
 #define WM8960_INBMIX1		0x2b
 #define WM8960_INBMIX2		0x2c
 #define WM8960_BYPASS1		0x2d
 #define WM8960_BYPASS2		0x2e
-#define WM8960_POWER3		0x2f
+#define WM8960_POWER3		  0x2f
 #define WM8960_ADDCTL4		0x30
 #define WM8960_CLASSD1		0x31
 
 #define WM8960_CLASSD3		0x33
-#define WM8960_PLL1		    0x34
-#define WM8960_PLL2		    0x35
-#define WM8960_PLL3		    0x36
-#define WM8960_PLL4		    0x37
+#define WM8960_PLLN		    0x34
+#define WM8960_PLLK1	    0x35
+#define WM8960_PLLK2	    0x36
+#define WM8960_PLLK3	    0x37
 
 
 /*
@@ -118,7 +118,7 @@ esp_err_t wm8960_init(i2c_dev_t *dev);
   * @param  rate: audio sample rate
   * @retval ESP_OK: success.
   */
-esp_err_t wm8960_set_sample_rate(i2c_dev_t *dev, int rate);
+esp_err_t wm8960_set_clk(i2c_dev_t *dev, int sample_rate, int bit_depth);
 
 /**
   * @brief  Enable WM8960 soft mute mode.
@@ -139,11 +139,11 @@ esp_err_t wm8960_set_mute(i2c_dev_t *dev, bool mute);
 /**
   * @brief  Set WM8960 DAC volume.
   * @param  dev: The i2c device corresponding to wm8960 units
-  * @param  vol: value of DAC volume (0-100)
+  * @param  vol: value of DAC volume (0-100%)
   * @param  init: set true if in startup mode (reads volume from nvs)
   * @retval ESP_OK: success.
   */
-esp_err_t wm8960_set_volume(i2c_dev_t *dev, uint8_t vol, bool init);
+esp_err_t wm8960_set_volume(i2c_dev_t *dev, uint8_t vol);
 
 /**
   * @brief  Get WM8960 DAC volume.
