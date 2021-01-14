@@ -118,7 +118,7 @@ esp_err_t wm8960_init(i2c_dev_t *dev);
   * @param  rate: audio sample rate
   * @retval ESP_OK: success.
   */
-esp_err_t wm8960_set_clk(i2c_dev_t *dev, int sample_rate, int bit_depth);
+esp_err_t wm8960_set_clk(i2c_dev_t *dev, int sample_rate, uint8_t bit_depth);
 
 /**
   * @brief  Enable WM8960 soft mute mode.

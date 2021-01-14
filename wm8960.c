@@ -137,7 +137,7 @@ esp_err_t wm8960_init(i2c_dev_t *dev){
     return ret;
 }
 
-esp_err_t wm8960_set_clk(i2c_dev_t *dev, int sample_rate, int bit_depth){
+esp_err_t wm8960_set_clk(i2c_dev_t *dev, int sample_rate, uint8_t bit_depth){
     esp_err_t ret;
 
     //Configure SYSCLK from MCLK
@@ -177,12 +177,18 @@ esp_err_t wm8960_set_clk(i2c_dev_t *dev, int sample_rate, int bit_depth){
             ret = wm8960_write_register(dev, WM8960_CLOCK1, wm8960_reg_val[WM8960_CLOCK1]);
             break;
         }
+        case 8000: {
+            wm8960_reg_val[WM8960_CLOCK1] |= 0x6<<6 | 0x6<<3; // ADC/DACDIV = SYSCLK / 6 = 8kHz
+            ret = wm8960_write_register(dev, WM8960_CLOCK1, wm8960_reg_val[WM8960_CLOCK1]);
+            break;
+        }
         default: {
+            ret = ESP_OK;
             break;
         }
     }
     if(ret != ESP_OK)  {
-        ESP_LOGI(TAG, "clocking config failed");
+        ESP_LOGI(TAG, "SYSCLK config: failed to select sample rate");
         return ret;
     }
     ESP_LOGI(TAG, "sample rate set to %dkHz", sample_rate);
@@ -193,24 +199,34 @@ static esp_err_t wm8960_set_pll(i2c_dev_t *dev, uint8_t PLLN, uint32_t PLLK){
     esp_err_t ret;
 
     wm8960_reg_val[WM8960_POWER2] |= 1<<0; // PLL On
-    ret = wm8960_write_register(dev, WM8960_POWER2, wm8960_reg_val[WM8960_POWER2]);
+    if(wm8960_write_register(dev, WM8960_POWER2, wm8960_reg_val[WM8960_POWER2]) != ESP_OK){
+        ESP_LOGI(TAG, "SYSCLK config: pll failed to power on");
+        ret |= ESP_FAIL;
+    }
 
     wm8960_reg_val[WM8960_PLLN] |= 1<<5; // PLL Fractional Mode
     wm8960_reg_val[WM8960_PLLN] |= 1<<4; // PLL Prescaler On
     wm8960_reg_val[WM8960_PLLN] &= 0x1f0; // PLLN Reset
     wm8960_reg_val[WM8960_PLLN] |= PLLN; // PLLN Set
-    ret |=  wm8960_write_register(dev, WM8960_PLLN, wm8960_reg_val[WM8960_PLLN]);
+    if(wm8960_write_register(dev, WM8960_PLLN, wm8960_reg_val[WM8960_PLLN]) != ESP_OK){
+        ESP_LOGI(TAG, "SYSCLK config: failed to set plln");
+        ret |= ESP_FAIL;
+    }
     
     wm8960_reg_val[WM8960_PLLK1] = PLLK >> 16; // PLLK High Word Set
-    ret |= wm8960_write_register(dev, WM8960_PLLK1, wm8960_reg_val[WM8960_PLLK1]);
+    ret = wm8960_write_register(dev, WM8960_PLLK1, wm8960_reg_val[WM8960_PLLK1]);
     wm8960_reg_val[WM8960_PLLK2] = (PLLK >> 8) & ~(1<<8); // PLLK Middle Word Set
     ret |= wm8960_write_register(dev, WM8960_PLLK2, wm8960_reg_val[WM8960_PLLK2]);
-    wm8960_reg_val[WM8960_PLLK2] = PLLK & ~(1<<8); // PLLK Low Word Set
+    wm8960_reg_val[WM8960_PLLK3] = PLLK & ~(1<<8); // PLLK Low Word Set
     ret |= wm8960_write_register(dev, WM8960_PLLK3, wm8960_reg_val[WM8960_PLLK3]);
+    if(ret != ESP_OK) ESP_LOGI(TAG, "SYSCLK config: failed to set pllk");
 
     wm8960_reg_val[WM8960_CLOCK1] |= 1<<2; // PLL POST Divider ON
     wm8960_reg_val[WM8960_CLOCK1] |= 1<<0; // PLL Selected
-    ret |= wm8960_write_register(dev, WM8960_CLOCK1, wm8960_reg_val[WM8960_CLOCK1]);
+    if(wm8960_write_register(dev, WM8960_CLOCK1, wm8960_reg_val[WM8960_CLOCK1]) != ESP_OK){
+        ESP_LOGI(TAG, "SYSCLK config: failed to select clock");
+        ret |= ESP_FAIL;
+    }
 
     return ret;
 }
