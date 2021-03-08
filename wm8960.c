@@ -198,6 +198,12 @@ esp_err_t wm8960_set_clk(i2c_dev_t *dev, int sample_rate, uint8_t bit_depth){
 static esp_err_t wm8960_set_pll(i2c_dev_t *dev, uint8_t PLLN, uint32_t PLLK){
     esp_err_t ret;
 
+    wm8960_reg_val[WM8960_CLOCK1] &= ~(1<<0); // PLL Selected
+    if(wm8960_write_register(dev, WM8960_CLOCK1, wm8960_reg_val[WM8960_CLOCK1]) != ESP_OK){
+        ESP_LOGI(TAG, "SYSCLK config: failed to deselect pll");
+        ret |= ESP_FAIL;
+    }
+
     wm8960_reg_val[WM8960_POWER2] |= 1<<0; // PLL On
     if(wm8960_write_register(dev, WM8960_POWER2, wm8960_reg_val[WM8960_POWER2]) != ESP_OK){
         ESP_LOGI(TAG, "SYSCLK config: pll failed to power on");
